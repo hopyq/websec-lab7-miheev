@@ -22,11 +22,9 @@ const Messages: React.FC = () => {
             <h1 className="text-xl font-bold">Chat (XSS vulnerable)</h1>
             <div className="mt-4 border p-2 rounded h-60 overflow-auto">
                 {messages.map((msg, index) => (
-                    <div
-                        key={index}
-                        className="p-1 border-b last:border-none"
-                        dangerouslySetInnerHTML={{ __html: msg.content }}
-                    />
+                    <div key={index} className="p-1 border-b last:border-none">
+                        {msg.content}
+                    </div>
                 ))}
             </div>
             <div className="mt-4 flex">

@@ -40,56 +40,85 @@ db.serialize(() => {
     )
 })
 
-app.post("/auth/register", (req, res) => {
-    const { username, password } = req.body
-    if (!username || !password) {
-        return res
-            .status(400)
-            .json({ error: "Username and password are required" })
-    }
+const bcrypt = require('bcrypt');
+const saltRounds = 10;
 
-    db.run(
-        `INSERT INTO users (username, password) VALUES (?, ?)`,
-        [username, password],
-        function (err) {
-            if (err) {
-                return res
-                    .status(500)
-                    .json({ error: "User already exists or database error" })
-            }
-            res.json({ success: true, userId: this.lastID })
+app.post("/auth/register", async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        if (!username || !password) {
+            return res
+                .status(400)
+                .json({ error: "Имя и пароль обязательны к заполнению" });
         }
-    )
-})
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
+        db.run(
+            `INSERT INTO users (username, password) VALUES (?, ?)`,
+            [username, hashedPassword],
+            function (err) {
+                if (err) {
+                    return res
+                        .status(500)
+                        .json({ error: "Пользователь уже зарегестрирован" });
+                }
+                res.json({ success: true, userId: this.lastID });
+            }
+        );
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Ошибка сервера" });
+    }
+});
 
-app.post("/auth/login", (req, res) => {
-    const { username, password } = req.body
-    const query = `SELECT * FROM users WHERE username = '${username}' AND password = '${password}'`
-    db.get(query, (err, user) => {
-        if (err) return res.status(500).json({ error: "Ошибка сервера" })
-        if (!user) return res.status(401).json({ error: "Неверные данные" })
-        res.json({ message: "Успешный вход", user })
-    })
-})
+
+app.post("/auth/login", async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        const query = `SELECT * FROM users WHERE username = ?`;
+        
+        db.get(query, [username], (err, user) => {
+            if (err) {
+                console.error(err.message);
+                return res.status(500).json({ error: "Ошибка сервера" });
+            }
+            if (!user) {
+                return res.status(401).json({ error: "Неверные данные" });
+            }
+            
+            const isValidPassword = bcrypt.compareSync(password, user.password);
+            if (!isValidPassword) {
+                return res.status(401).json({ error: "Неверные данные" });
+            }
+            
+            res.json({ message: "Успешный вход", user });
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Ошибка сервера" });
+    }
+});
+
 
 app.post("/messages", (req, res) => {
     const { user_id, content } = req.body
     db.run(
-        `INSERT INTO messages (user_id, content) VALUES (${user_id}, '${content}')`,
+        `INSERT INTO messages (user_id, content) VALUES (?, ?)`,
+        [user_id, content],
         function (err) {
-            if (err) return res.status(500).json({ error: "Ошибка сервера" })
-            res.json({ message: "Сообщение отправлено", id: this.lastID })
+            if (err) return res.status(500).json({ error: "Ошибка сервера" });
+            res.json({ message: "Сообщение отправлено", id: this.lastID });
         }
-    )
+    );
 })
 
 app.get("/users", (req, res) => {
     const { search } = req.query
-    const query = `SELECT * FROM users WHERE username LIKE '%${search}%'`
-    db.all(query, (err, users) => {
+    const query = `SELECT * FROM users WHERE username LIKE ?`;
+    const searchPattern = `%${search}%`;
+    db.all(query, [searchPattern], (err, users) => { 
         if (err) return res.status(500).json({ error: "Ошибка сервера" })
-        res.json(users)
-    })
+        res.json(users) 
+    });
 })
 
 app.post("/users/update", (req, res) => {
