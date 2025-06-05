@@ -45,5 +45,4 @@ const Messages: React.FC = () => {
         </div>
     )
 }
-
 export default Messages
