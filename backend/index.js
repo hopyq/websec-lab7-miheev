@@ -75,7 +75,6 @@ app.post("/auth/login", async (req, res) => {
     try {
         const { username, password } = req.body;
         const query = `SELECT * FROM users WHERE username = ?`;
-        
         db.get(query, [username], (err, user) => {
             if (err) {
                 console.error(err.message);
@@ -92,6 +91,7 @@ app.post("/auth/login", async (req, res) => {
             
             res.json({ message: "Успешный вход", user });
         });
+        
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Ошибка сервера" });

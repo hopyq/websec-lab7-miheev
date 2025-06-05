@@ -2,8 +2,10 @@
 
 ## Выполнение задания
 
-1. SQL инъекция в поле логина пользователя, если ввести ' UNION SELECT username, password FROM users --, то пользователь получит доступ ко всем логинам и паролям других пользователей.
-Для фикса необходимо изменить следующий код в index.js:
+1. Уязвимость: SQL-инъекция в аутентификации
+Угроза: Ввод ' UNION SELECT username, password FROM users -- раскрывает все учетные данные
+Причина: Конкатенация строк в SQL-запросе
+Исправление: Переход на параметризованные запросы в index.js:
 ```bash
 query = `SELECT * FROM users WHERE username = '${username}' AND password = '${password}'`
 ```
@@ -21,32 +23,39 @@ const query = `SELECT * FROM users WHERE username = ? AND password = ?`;
       res.json({ message: "Успешный вход", user });
     });
 ```
-2. SQL инъекция в выборке пользователей, если в бд будет пользователь с логином ' UNION SELECT username, password FROM users --, то пользователь получит доступ ко всем логинам и паролям других пользователей при выборке данных из таблицы.
-Для фикса необходимо изменить следующий код в index.js:
+
+2. Уязвимость: SQL-инъекция при обновлении профиля
+Эксплуатация: Ввод ' UNION SELECT username, password FROM users -- в поле имени приводит к выполнению произвольного SQL-кода
+Причина: Прямая вставка пользовательских данных в UPDATE-запрос
+Исправление: В файле index.js заменяем уязвимый код на параметризованный запрос
 ```bash
-app.get("/users", (req, res) => {
-    const { search } = req.query
-    const query = `SELECT * FROM users WHERE username LIKE '%${search}%'`
-    db.all(query, (err, users) => {
-        if (err) return res.status(500).json({ error: "Ошибка сервера" })
-        res.json(users)
-    })
+app.post("/users/update", (req, res) => {
+    const { id, username } = req.body
+    db.run(
+        `UPDATE users SET username = '${username}' WHERE id = ${id}`,
+        function (err) {
+            if (err) return res.status(500).json({ error: "Ошибка сервера" })
+            res.json({ message: "Имя пользователя обновлено" })
+        }
+    )
 })
 ```
 На этот:
 ```bash
-app.get("/users", (req, res) => {
-    const { search } = req.query
-    const query = `SELECT * FROM users WHERE username LIKE ?`;
-    const searchPattern = `%${search}%`;
-    db.all(query, [searchPattern], (err, users) => { 
-        if (err) return res.status(500).json({ error: "Ошибка сервера" })
-        res.json(users) 
-    });
-})
+db.run(
+    `UPDATE users SET username = ? WHERE id = ?`,
+    [username, id],
+    function (err) {
+        if (err) return res.status(500).json({ error: "Ошибка сервера" });
+        res.json({ message: "Имя пользователя обновлено" });
+    }
+);
 ```
-3. SQL инъекция в вставке пользователей в таблицу, если в поле логина вписать ' UNION SELECT username, password FROM users --, то добавится пользователь с таким запросом, что может вызвать ошибки или иные проблемы.
-Для фикса необходимо изменить следующий код в index.js:
+
+3. Уязвимость: SQL-инъекция при регистрации пользователей
+Эксплуатация: Ввод ' UNION SELECT username, password FROM users -- в поле логина приводит к выполнению произвольного SQL-запроса
+Причина: Прямая подстановка пользовательского ввода в SQL-запрос
+Исправление: В файле index.js заменяем уязвимый код на параметризованный запрос
 ```bash
 app.post("/messages", (req, res) => {
     const { user_id, content } = req.body
@@ -72,34 +81,38 @@ db.run(
 
 ```
 
-4. SQL инъекция в обновлении имени пользователя, если в поле вписать ' UNION SELECT username, password FROM users --, то в бд добавится пользователь с таким запросом, что может вызвать ошибки или иные проблемы.
-Для фикса необходимо изменить следующий код в index.js:
+4. Уязвимость: SQL-инъекция в поиске пользователей
+Эксплуатация: При наличии пользователя с логином ' UNION SELECT username, password FROM users -- раскрываются все учётные данные
+Причина: Нефильтрованный параметр search в LIKE-запросе
+Исправление: В файле index.js заменяем:
 ```bash
-app.post("/users/update", (req, res) => {
-    const { id, username } = req.body
-    db.run(
-        `UPDATE users SET username = '${username}' WHERE id = ${id}`,
-        function (err) {
-            if (err) return res.status(500).json({ error: "Ошибка сервера" })
-            res.json({ message: "Имя пользователя обновлено" })
-        }
-    )
+app.get("/users", (req, res) => {
+    const { search } = req.query
+    const query = `SELECT * FROM users WHERE username LIKE '%${search}%'`
+    db.all(query, (err, users) => {
+        if (err) return res.status(500).json({ error: "Ошибка сервера" })
+        res.json(users)
+    })
 })
 ```
 На этот:
 ```bash
-db.run(
-    `UPDATE users SET username = ? WHERE id = ?`,
-    [username, id],
-    function (err) {
-        if (err) return res.status(500).json({ error: "Ошибка сервера" });
-        res.json({ message: "Имя пользователя обновлено" });
-    }
-);
+app.get("/users", (req, res) => {
+    const { search } = req.query
+    const query = `SELECT * FROM users WHERE username LIKE ?`;
+    const searchPattern = `%${search}%`;
+    db.all(query, [searchPattern], (err, users) => { 
+        if (err) return res.status(500).json({ error: "Ошибка сервера" })
+        res.json(users) 
+    });
+})
 ```
+Результат: Защита от инъекций при сохранении функциональности поиска.
 
-5. XSS инъекция в messages, если в поле сообщения вписать любую js команду, то она выполнится на странице.
-Для фикса необходимо изменить следующий код в messages.tsx:
+5. Уязвимость: XSS-атака в отображении сообщений
+Эксплуатация: Возможность выполнения произвольного JavaScript-кода через содержимое сообщений
+Причина: Использование опасного метода dangerouslySetInnerHTML
+Исправление: В файле messages.tsx заменяем уязвимый код на безопасный вывод текста
 ```bash
 dangerouslySetInnerHTML={{ __html: msg.content }}
 ```
