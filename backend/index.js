@@ -64,44 +64,53 @@ app.post("/auth/register", (req, res) => {
 
 app.post("/auth/login", (req, res) => {
     const { username, password } = req.body
-    const query = `SELECT * FROM users WHERE username = '${username}' AND password = '${password}'`
-    db.get(query, (err, user) => {
-        if (err) return res.status(500).json({ error: "Ошибка сервера" })
-        if (!user) return res.status(401).json({ error: "Неверные данные" })
-        res.json({ message: "Успешный вход", user })
-    })
-})
+    const query = `SELECT * FROM users WHERE username = ?`;
+        db.get(query, [username], (err, user) => {
+            if (err) {
+                console.error(err.message);
+                return res.status(500).json({ error: "Ошибка сервера" });
+            }
+            if (!user) {
+                return res.status(401).json({ error: "Неверные данные" });
+            }
+            
+            const isValidPassword = bcrypt.compareSync(password, user.password);
+            if (!isValidPassword) {
+                return res.status(401).json({ error: "Неверные данные" });
+            }
+            
+            res.json({ message: "Успешный вход", user });
+        });
 
 app.post("/messages", (req, res) => {
     const { user_id, content } = req.body
     db.run(
-        `INSERT INTO messages (user_id, content) VALUES (${user_id}, '${content}')`,
-        function (err) {
-            if (err) return res.status(500).json({ error: "Ошибка сервера" })
-            res.json({ message: "Сообщение отправлено", id: this.lastID })
-        }
-    )
-})
+    `INSERT INTO messages (user_id, content) VALUES (?, ?)`,
+    [user_id, content],
+    function (err) {
+        if (err) return res.status(500).json({ error: "Ошибка сервера" });
+        res.json({ message: "Сообщение отправлено", id: this.lastID });
+    }
+);
 
 app.get("/users", (req, res) => {
     const { search } = req.query
-    const query = `SELECT * FROM users WHERE username LIKE '%${search}%'`
-    db.all(query, (err, users) => {
+    const query = `SELECT * FROM users WHERE username LIKE ?`;
+    const searchPattern = `%${search}%`;
+    db.all(query, [searchPattern], (err, users) => { 
         if (err) return res.status(500).json({ error: "Ошибка сервера" })
-        res.json(users)
-    })
+        res.json(users) 
+    });
 })
 
-app.post("/users/update", (req, res) => {
-    const { id, username } = req.body
-    db.run(
-        `UPDATE users SET username = '${username}' WHERE id = ${id}`,
-        function (err) {
-            if (err) return res.status(500).json({ error: "Ошибка сервера" })
-            res.json({ message: "Имя пользователя обновлено" })
-        }
-    )
-})
+db.run(
+    `UPDATE users SET username = ? WHERE id = ?`,
+    [username, id],
+    function (err) {
+        if (err) return res.status(500).json({ error: "Ошибка сервера" });
+        res.json({ message: "Имя пользователя обновлено" });
+    }
+);
 
 app.listen(port, () => {
     console.log(`Server is running on http://localhost:${port}`)
