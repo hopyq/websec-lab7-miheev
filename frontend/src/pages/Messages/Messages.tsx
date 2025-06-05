@@ -24,8 +24,8 @@ const Messages: React.FC = () => {
                 {messages.map((msg, index) => (
                     <div
                         key={index}
-                        className="p-1 border-b last:border-none"
-                        dangerouslySetInnerHTML={{ __html: msg.content }}
+                        className="p-1 border-b last:border-none">
+                        {msg.content}
                     />
                 ))}
             </div>
